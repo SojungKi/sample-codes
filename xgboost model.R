@@ -1,8 +1,8 @@
 
 ############################ Description ##############################
-######## This code predicts three outcomes (adopted, euthanized, other)
-######## using xgboost under 3~5-fold cross-validation
-######## 
+######## This code predicts the probability of sheltered animals ending up in one of
+######## three outcomes (adopted, euthanized, other) under 15 predictors
+######## using 'xgboost' under 3~5-fold cross-validation
 ######## author: sojung ki
 #######################################################################
 
