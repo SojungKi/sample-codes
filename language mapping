@@ -1,0 +1,239 @@
+
+
+
+library(xlsx)
+library("stringr")
+library(tau)
+
+
+######### REFERENECE ######################################################
+# map = original file
+# bank = metastream
+###########################################################################
+########### rename variables ##########
+#bank <- diction[,c(2,3,4)] #word bank
+#names(bank)[1] <- "word"
+#names(bank)[2] <- "short"
+#names(bank)[3] <- "full"
+map <- origin9[,c(4,6,7)]
+names(map)[1] <- "korean" #change label
+names(map)[2] <- "shortened"
+names(map)[3]<- "fullword"
+########## SUBSET non-missing data #########################################
+subs.map <- map[map$shortened!="",]
+subs.map <- subs.map[!is.na(subs.map$shortened),]
+uniq.subs <- unique(subs.map) #unique non-missing data
+########## FILL IN DUPLICATES (corresponding to non-missing data)###########
+len.uniq.subs = dim(uniq.subs)[1]
+for(i in 1:len.uniq.subs){
+  if(uniq.subs$korean[i] %in% map$korean){
+    map[map$korean == uniq.subs$korean[i], 2] <- uniq.subs$shortened[i]
+    map[map$korean == uniq.subs$korean[i], 3] <- uniq.subs$fullword[i]
+  }
+}
+
+for(t in 1:dim(map)[1]){
+  if(!(map$shortened[t] %in% uniq.subs$korean)){
+    map[t, 2] <- NA
+    map[t, 3] <- NA
+  }
+}
+
+
+
+
+####################################################################
+######################### FUNCTIONS USED ###########################
+####################################################################
+suffix_summ <- function(x){
+  dd<- x[grepl("^.+(계)$", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"summ",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"SUMMATION",sep="_")
+  }
+  return(x)
+}
+suffix_list <- function(x){
+  dd<- x[grepl("^.+(목록)$", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"list",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"LIST",sep="_")
+  }
+  return(x)
+}
+suffix_quant <- function(x){
+  dd<- x[grepl("^.+(량)$", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"qty",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"QUANTITY",sep="_")
+  }
+  return(x)
+}
+suffix_day <- function(x){
+  dd<- x[grepl("^.+(일)$", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"dd",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"DAY",sep="_")
+  }
+  return(x)
+}
+suffix_name <- function(x){
+  dd<- x[grepl("^.+(명)$", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"name",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"NAME",sep="_")
+  }
+  return(x)
+}
+suffix_perc <- function(x){
+  dd<- x[grepl("+(%)+", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"rt",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"RATE",sep="_")
+  }
+  return(x)
+}
+suffix_tt <- function(x){
+  dd<- x[grepl("+(&#13;&#10)+", x[,1])==TRUE,]
+  dddim<-dim(dd)[1]
+  for(v in 1:dddim){
+    x[x[,1]==dd[v,1],2] <- paste(dd[v,2],"13_10",sep="_")
+    x[x[,1]==dd[v,1],3] <- paste(dd[v,3],"13_10",sep="_")
+  }
+  return(x)
+}
+######### this is a function that finds partial strings in the text #########################
+unique_words <- function(line, wbank){
+  rslt <- sapply(wbank[,1], regexpr, line, ignore.case=TRUE) #for first string, find all location
+  found <- which(rslt > 0) #for first string, subwords found
+  collection <- paste(unlist(names(found))) #store found words to a vector
+  collection <- collection[nchar(collection) > 1] #remove single letters
+  english <- unlist(str_extract_all( line,"[a-zA-Z]+")) #extract all english words
+  collection <- c(collection, english) 
+  
+  if(length(collection) > 1) { #more than 1 subsets
+    rslt2 <- sapply(collection, regexpr, collection, ignore.case=TRUE) #find subsets
+    nc <- length(collection)
+    repeats <- apply(rslt2,2,sum) 
+    new.collect <- names(which(repeats == 2-nc)) #extract non-repeated words
+    return(new.collect)
+  } else if(length(collection) == 1){ #one subsets
+    rslt2 <- sapply(collection, regexpr, collection, ignore.case=TRUE) 
+    new.collect <- names(which(rslt2 == 1)) 
+  } else{ #none
+    return(character(0))
+  }
+}
+#########this is a function that completes columns 2,3 in MAP DF#########################
+### words = value returned from unique_words
+newmap <- function(line, wbank, new.collect){ ## subsetted words, of the first column, the BANK df
+  
+  if(length(new.collect) >0){
+    ###### SECOND COLUMN
+    rslt3 <- sapply(new.collect, gregexpr, line, ignore.case=TRUE) #locate the words in string
+    nrslt3 <- setNames(unlist(rslt3, use.names=F),rep(names(rslt3), lengths(rslt3))) #maintain names
+    ordered <- sort(nrslt3,decreasing=FALSE) #into ascending order
+    no <-length(ordered)
+    ## add next words, if exist
+    if(no == 1){
+      if(!(names(ordered[1]) %in% wbank[,1])){
+        pasted <- names(ordered[1]) ## first located word 
+        pasted3 <- toupper(names(ordered[1])) ## first located word
+      }else {
+        pasted <- wbank[wbank[,1] == names(ordered[1]),2] ## first located word 
+        pasted3 <- wbank[wbank[,1] == names(ordered[1]),3] ## first located word
+      }
+      sec_third <- c(pasted,pasted3)
+    } else {
+        if(!(names(ordered[1]) %in% wbank[,1])){
+          pasted <- names(ordered[1]) ## first located word 
+          pasted3 <- toupper(names(ordered[1])) ## first located word
+        }else {
+          pasted <- wbank[wbank[,1] == names(ordered[1]),2] ## first located word 
+          pasted3 <- wbank[wbank[,1] == names(ordered[1]),3] ## first located word
+        }
+        for(m in 2:no){
+          if(!(names(ordered[m]) %in% wbank[,1])){
+            newpaste <- names(ordered[m]) ## first located word 
+            pasted = paste(pasted,newpaste, sep = "_") #update paste
+            newpaste3 <- toupper(names(ordered[m])) ## first located word
+            pasted3 = paste(pasted3,newpaste3, sep = "_") #update pasted
+          }else {
+            newpaste = wbank[wbank[,1] == names(ordered[m]),2] ## next located word
+            pasted = paste(pasted,newpaste, sep = "_") #update paste
+            newpaste3 = wbank[wbank[,1] == names(ordered[m]),3] ## next located word
+            pasted3 = paste(pasted3,newpaste3, sep = "_") #update pasted
+          }
+        }
+      sec_third <- c(pasted,pasted3)
+    }
+    
+    return(sec_third)  #outputs what should go into the second,third column of maps
+  
+    } else {
+      empty = c("","")
+    return(empty)
+    }
+}
+
+##################################################
+     ####     #   #     #   #
+     #  #     #   #     ##  #
+     ####     #   #     # # #
+     #   #    #####     #  ##
+##################################################
+maplen <- dim(map)[1]
+for(q in 1:maplen){
+  if(is.na(map$shortened[q]) ==TRUE){
+    base <- unique_words(map[q,1], bank)
+    floor <- newmap(map[q,1], bank, base)
+    map[q,2] <- floor[1]
+    map[q,3] <- floor[2]
+  } 
+}
+View(map)
+map <- suffix_list(map) #목록
+map <- suffix_day(map)    #일 
+map <- suffix_name(map)   #명
+map <- suffix_perc(map)   #%
+map <- suffix_tt(map)     #&#13;&#10
+map <- suffix_quant(map)  #량 
+map <- suffix_summ(map)    #계 
+origin9[,6] <- map[,2]
+origin9[,7] <- map[,3]
+write.xlsx(origin9, file="finalmapping9.xlsx",row.names=FALSE)
+
+
+
+########################## DOWNLOAD DATA ##########################
+diction <- read.xlsx("C:/Users/rohgb/Downloads/WordList.xlsx",sheetIndex =1, 
+                    encoding = "UTF-8", stringsAsFactors=FALSE )
+#origin <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                   startRow = 1, endRow = 5000,encoding="UTF-8",stringsAsFactors=FALSE )
+
+#origin2 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 5001, endRow = 10000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin3 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                   startRow = 10001, endRow = 15000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin4 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 15001, endRow = 20000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin5 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 20001, endRow = 25000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin6 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 25001, endRow = 30000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin7 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 30001, endRow = 35000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin8 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 35001, endRow = 40000,encoding="UTF-8", stringsAsFactors=FALSE)
+origin9 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+                    startRow = 40001, endRow = 45000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin10 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                   startRow = 45001, endRow = 50000,encoding="UTF-8", stringsAsFactors=FALSE)
+#origin11 <- read.xlsx("C:/Users/rohgb/ldspmapping.xlsx",sheetIndex = 1,
+#                    startRow = 50001,encoding="UTF-8", stringsAsFactors=FALSE)
