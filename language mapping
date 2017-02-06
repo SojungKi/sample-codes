@@ -1,4 +1,7 @@
-
+############################ Description ##############################
+######## This code maps english full length words to thier corresponding abbreviated forms based on metastream
+######## author: sojung ki
+#######################################################################
 
 
 library(xlsx)
