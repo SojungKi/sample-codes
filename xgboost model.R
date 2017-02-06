@@ -1,9 +1,9 @@
 
 ############################ Description ##############################
 ######## This code predicts three outcomes (adopted, euthanized, other)
-######## using packages xgboost under 3~5-fold cross-validation
+######## using xgboost under 3~5-fold cross-validation
 ######## 
-######## 
+######## author: sojung ki
 #######################################################################
 
 
